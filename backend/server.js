@@ -82,6 +82,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
 // =====================================================
 // GEMINI SETUP
 // =====================================================
@@ -374,13 +375,30 @@ ${JSON.stringify(amlData, null, 2)}
       };
     }
 
+    await Document.updateMany(
+      { user_id: userId },
+      {
+        ai_document_type: "AI_SUMMARY",
 
-    await Document.updateMany({ user_id: userId }, {
-      ai_output: ai,
-      risk_assessment: ai.risk
-    });
+        ai_parsed_fields: ai,
 
-        const allowedStatuses = ["APPROVED", "NEEDS_REVIEW", "REJECTED"];
+        ai_issues: [
+          ai.summary_text,
+          `Risk: ${ai.risk}`,
+          `Final: ${ai.final_status}`
+        ],
+
+        status:
+          ai.final_status === "APPROVED"
+            ? "VERIFIED"
+            : ai.final_status === "REJECTED"
+            ? "REJECTED"
+            : "PENDING"
+      }
+    );
+
+
+    const allowedStatuses = ["APPROVED", "NEEDS_REVIEW", "REJECTED"];
     let finalStatus = ai.final_status;
 
     if (!allowedStatuses.includes(finalStatus)) {

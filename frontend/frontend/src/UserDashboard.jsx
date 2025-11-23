@@ -1,189 +1,136 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate, Link } from "react-router-dom";
 
 export default function UserDashboard() {
+  const token = localStorage.getItem("token");
+
   const [user, setUser] = useState(null);
   const [docs, setDocs] = useState([]);
-  const token = localStorage.getItem("token");
-  const navigate = useNavigate();
+  const [aiSummary, setAiSummary] = useState(null);
 
   useEffect(() => {
     if (!token) return;
+
     axios
       .get("http://localhost:5000/user/me", {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => setUser(res.data))
       .catch(() => {
-        setUser(null);
         localStorage.removeItem("token");
-        navigate("/login");
+        window.location.href = "/login";
       });
   }, [token]);
 
   useEffect(() => {
     if (!token) return;
+
     axios
       .get("http://localhost:5000/user/my-docs", {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .then((res) => setDocs(res.data));
+      .then((res) => {
+        setDocs(res.data);
+        const firstDoc = res.data[0];
+        if (firstDoc?.ai_output) {
+          setAiSummary(firstDoc.ai_output);
+        }
+      });
   }, [token]);
 
-  function handleLogout() {
-    localStorage.removeItem("token");
-    navigate("/");
-  }
+  if (!user) return null;
 
-  // -----------------------------
-  // KYC STATUS CALCULATION
-  // -----------------------------
-  function getKYCStatus() {
-    if (docs.some((d) => d.status === "REJECTED")) return "KYC FAILED";
-    if (docs.some((d) => d.status === "PENDING")) return "UNDER REVIEW";
-    if (docs.length > 0 && docs.every((d) => d.status === "VERIFIED"))
-      return "KYC VERIFIED";
-    return "NOT SUBMITTED";
-  }
-
-  const kycStatus = getKYCStatus();
-
-  // KYC COLOR
-  const statusColor = {
-    "KYC FAILED": "bg-red-100 text-red-800 border-red-300",
-    "UNDER REVIEW": "bg-yellow-100 text-yellow-800 border-yellow-300",
-    "KYC VERIFIED": "bg-green-100 text-green-800 border-green-300",
-    "NOT SUBMITTED": "bg-gray-100 text-gray-800 border-gray-300"
+  const statusColors = {
+    APPROVED: "text-green-600 bg-green-100",
+    NEEDS_REVIEW: "text-yellow-600 bg-yellow-100",
+    REJECTED: "text-red-600 bg-red-100",
+    PENDING_DOCS: "text-blue-600 bg-blue-100",
+    PROCESSING: "text-purple-600 bg-purple-100",
+    NOT_STARTED: "text-gray-600 bg-gray-100",
   };
 
-  // -----------------------------
-  // AI SUMMARY BUILDER
-  // -----------------------------
-  function buildAISummary() {
-    let allIssues = [];
-    let allFields = {};
-    let docTypes = [];
-
-    docs.forEach((doc) => {
-      if (doc.ai_issues?.length) allIssues.push(...doc.ai_issues);
-      if (doc.ai_parsed_fields)
-        Object.assign(allFields, doc.ai_parsed_fields);
-      if (doc.ai_document_type) docTypes.push(doc.ai_document_type);
-    });
-
-    return {
-      fields: allFields,
-      issues: allIssues,
-      detectedTypes: [...new Set(docTypes)]
-    };
-  }
-
-  const aiSummary = buildAISummary();
-
-  if (!token) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Link to="/login">Login Required</Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* NAVBAR */}
-      <nav className="bg-white shadow border-b">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">KYC Portal</h1>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+    <div className="space-y-10">
+
+      {/* USER INFO + KYC STATUS */}
+      <div className="bg-white p-8 rounded-2xl shadow border border-gray-200">
+        <h2 className="text-3xl font-bold text-gray-900">Welcome, {user.name}</h2>
+        <p className="text-gray-600 mt-2">{user.email}</p>
+
+        <div className="mt-6 flex items-center space-x-3">
+          <span className="text-lg font-semibold">KYC Status:</span>
+          <span
+            className={`px-4 py-2 rounded-xl font-bold ${statusColors[user.kyc_status]}`}
           >
-            Logout
-          </button>
+            {user.kyc_status}
+          </span>
         </div>
-      </nav>
+      </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        {/* ----------------------- */}
-        {/* KYC STATUS SECTION */}
-        {/* ----------------------- */}
-        <div
-          className={`p-6 rounded-xl border mb-10 text-center text-xl font-bold ${statusColor[kycStatus]}`}
-        >
-          KYC Status: {kycStatus}
-        </div>
+      {/* AI SUMMARY */}
+      {aiSummary && (
+        <div className="bg-white p-8 rounded-2xl shadow border border-gray-200">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">AI Assessment Summary</h3>
 
-        {/* ----------------------- */}
-        {/* AI SUMMARY SECTION */}
-        {/* ----------------------- */}
+          <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+            {aiSummary.summary_text}
+          </p>
 
-        <div className="bg-white rounded-xl shadow p-8 border mb-12">
-          <h2 className="text-2xl font-bold mb-4">AI Summary</h2>
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.entries(aiSummary.match || {}).map(([key, value]) => (
+              <div key={key} className="p-4 bg-gray-50 rounded-xl border text-center">
+                <p className="text-sm font-semibold text-gray-600 uppercase">
+                  {key.replace("_", " ")}
+                </p>
+                <p
+                  className={`mt-1 text-lg font-bold ${
+                    value === "YES" ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
 
-          {aiSummary.detectedTypes.length > 0 && (
-            <p className="text-gray-700 mb-4">
-              <b>Detected Document Types:</b>{" "}
-              {aiSummary.detectedTypes.join(", ")}
+          <div className="mt-6 p-4 bg-gray-50 rounded-xl border">
+            <p className="text-sm font-semibold text-gray-700">Risk Level:</p>
+            <p
+              className={`text-xl font-bold ${
+                aiSummary.risk === "LOW"
+                  ? "text-green-600"
+                  : aiSummary.risk === "MEDIUM"
+                  ? "text-yellow-600"
+                  : "text-red-600"
+              }`}
+            >
+              {aiSummary.risk}
             </p>
-          )}
-
-          {Object.keys(aiSummary.fields).length > 0 && (
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Extracted Fields:</h3>
-              <pre className="bg-gray-100 p-4 rounded-lg text-sm">
-                {JSON.stringify(aiSummary.fields, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {aiSummary.issues.length > 0 && (
-            <div>
-              <h3 className="font-semibold mb-2">AI Flagged Issues:</h3>
-              <ul className="list-disc pl-6 text-red-700">
-                {aiSummary.issues.map((issue, i) => (
-                  <li key={i}>{issue}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {aiSummary.issues.length === 0 &&
-            Object.keys(aiSummary.fields).length === 0 && (
-              <p className="text-gray-500">No AI summary available yet.</p>
-            )}
+          </div>
         </div>
+      )}
 
-        {/* ----------------------- */}
-        {/* DOCUMENT LIST */}
-        {/* ----------------------- */}
-
-        <h2 className="text-2xl font-bold mb-6">Your Documents</h2>
+      {/* DOCUMENTS */}
+      <div>
+        <h3 className="text-3xl font-bold text-gray-900 mb-6">Uploaded Documents</h3>
 
         {docs.length === 0 ? (
-          <p className="text-gray-500">No documents uploaded.</p>
+          <p className="text-gray-600">No documents uploaded.</p>
         ) : (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {docs.map((doc) => (
               <div
                 key={doc._id}
-                className="bg-white rounded-xl p-6 shadow border hover:shadow-lg transition"
+                className="bg-white p-6 rounded-2xl shadow border border-gray-200 hover:shadow-lg transition-all"
               >
-                <h3 className="font-bold text-lg mb-2">
-                  {doc.document_type.replace(/_/g, " ")}
-                </h3>
+                <h4 className="text-xl font-bold text-gray-900 mb-2">
+                  {doc.document_type.replace("_", " ")}
+                </h4>
 
-                <p className="text-sm text-gray-600 mb-2">
-                  File: {doc.original_name}
-                </p>
+                <p className="text-gray-600 text-sm mb-4">{doc.original_name}</p>
 
                 <span
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border ${statusColor[doc.status === "VERIFIED"
-                    ? "KYC VERIFIED"
-                    : doc.status === "REJECTED"
-                    ? "KYC FAILED"
-                    : "UNDER REVIEW"
-                  ]}`}
+                  className={`px-3 py-1 text-xs rounded-lg font-bold ${statusColors[doc.status]}`}
                 >
                   {doc.status}
                 </span>
@@ -191,8 +138,7 @@ export default function UserDashboard() {
                 <a
                   href={`http://localhost:5000/uploads/${doc.file_name}`}
                   target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 block text-blue-600 font-semibold"
+                  className="block mt-4 text-blue-600 hover:text-blue-800 font-medium"
                 >
                   View Document →
                 </a>

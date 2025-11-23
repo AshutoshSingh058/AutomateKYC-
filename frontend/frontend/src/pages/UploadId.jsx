@@ -3,9 +3,10 @@ import axios from "axios";
 
 export default function UploadId() {
   const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   async function upload() {
-    if (!file) return alert("Upload the ID proof");
+    if (!file) return alert("Please upload your ID Proof");
 
     const token = localStorage.getItem("token");
     const data = new FormData();
@@ -13,21 +14,74 @@ export default function UploadId() {
     data.append("document", file);
     data.append("document_type", "ID_PROOF");
 
-    await axios.post(
-      "http://localhost:5000/user/upload-document",
-      data,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    setLoading(true);
 
-    // go to address upload
+    await axios.post("http://localhost:5000/user/upload-document", data, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
     window.location.href = "/kyc/upload-address";
   }
 
   return (
-    <div>
-      <h2>Upload ID Proof</h2>
-      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
-      <button onClick={upload}>Next → Upload Address Proof</button>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-xl">
+
+        {/* Step Indicator */}
+        <div className="flex justify-between mb-10">
+          {["Details", "ID", "Address", "Selfie", "Status"].map((step, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <div
+                className={`w-4 h-4 rounded-full ${
+                  i === 1 ? "bg-blue-600" : i < 1 ? "bg-green-500" : "bg-gray-300"
+                }`}
+              ></div>
+              <span
+                className={`text-xs mt-2 font-medium ${
+                  i === 1 ? "text-blue-600" : i < 1 ? "text-green-600" : "text-gray-500"
+                }`}
+              >
+                {step}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-200">
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">
+            Upload ID Proof
+          </h1>
+
+          <p className="text-gray-600 mb-6">
+            Upload a clear photo or PDF of your government-issued ID.
+          </p>
+
+          <div className="space-y-6">
+
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setFile(e.target.files[0])}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500"
+            />
+
+            {file && (
+              <div className="bg-blue-50 text-blue-700 p-3 rounded-xl text-sm font-medium border border-blue-200">
+                Selected: {file.name}
+              </div>
+            )}
+
+            <button
+              onClick={upload}
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50"
+            >
+              {loading ? "Uploading..." : "Next → Upload Address Proof"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

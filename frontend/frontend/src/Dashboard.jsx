@@ -2,228 +2,219 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 export default function Dashboard() {
+  const token = localStorage.getItem("token");
+
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [docs, setDocs] = useState([]);
-  const [selectedDoc, setSelectedDoc] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [processingFile, setProcessingFile] = useState(null);
-  const [message, setMessage] = useState({ type: "", text: "" });
 
-  async function loadDocs() {
-    try {
-      const res = await axios.get("http://localhost:5000/all-docs");
-      setDocs(res.data);
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to load documents" });
-    }
-  }
-
+  // Fetch all KYC users
   useEffect(() => {
-    loadDocs();
+    loadUsers();
   }, []);
 
-  async function runOCR(file) {
+  function loadUsers() {
+    axios
+      .get("http://localhost:5000/admin/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setUsers(res.data))
+      .catch((err) => console.error("Admin fetch failed:", err));
+  }
+
+  // Fetch docs + AI for a user
+  function openUser(u) {
+    setSelectedUser(u);
     setLoading(true);
-    setProcessingFile(file);
-    setMessage({ type: "", text: "" });
-    try {
-      const res = await axios.get("http://localhost:5000/run-ocr", {
-        params: { file }
-      });
-      setSelectedDoc({ type: "OCR", data: res.data });
-      setMessage({ type: "success", text: "OCR processing completed" });
-    } catch (error) {
-      setMessage({ type: "error", text: "OCR processing failed" });
-    } finally {
-      setLoading(false);
-      setProcessingFile(null);
-      loadDocs();
-    }
+
+    axios
+      .get(`http://localhost:5000/admin/user-docs/${u._id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setDocs(res.data))
+      .finally(() => setLoading(false));
   }
 
-  async function analyzeDoc(file) {
-    setLoading(true);
-    setProcessingFile(file);
-    setMessage({ type: "", text: "" });
-    try {
-      const res = await axios.get("http://localhost:5000/analyze-doc", {
-        params: { file }
-      });
-      setSelectedDoc({ type: "AI", data: res.data });
-      setMessage({ type: "success", text: "AI analysis completed" });
-    } catch (error) {
-      setMessage({ type: "error", text: "AI analysis failed" });
-    } finally {
-      setLoading(false);
-      setProcessingFile(null);
-      loadDocs();
-    }
+  async function updateKycStatus(status) {
+    if (!selectedUser) return;
+
+    await axios.post(
+      "http://localhost:5000/admin/update-kyc",
+      { user_id: selectedUser._id, status },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    loadUsers();
+    alert("KYC updated successfully!");
   }
-
-  async function verify(id) {
-    try {
-      await axios.post("http://localhost:5000/verify", { id });
-      setMessage({ type: "success", text: "Document verified successfully" });
-      loadDocs();
-    } catch (error) {
-      setMessage({ type: "error", text: "Verification failed" });
-    }
-  }
-
-  async function reject(id) {
-    if (!window.confirm("Are you sure you want to reject this document?")) return;
-
-    try {
-      await axios.post("http://localhost:5000/reject", { id });
-      setMessage({ type: "success", text: "Document rejected" });
-      loadDocs();
-    } catch (error) {
-      setMessage({ type: "error", text: "Rejection failed" });
-    }
-  }
-
-  const stats = {
-    total: docs.length,
-    verified: docs.filter(d => d.status === "VERIFIED").length,
-    pending: docs.filter(d => d.status === "PENDING").length,
-    rejected: docs.filter(d => d.status === "REJECTED").length
-  };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="space-y-10">
 
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Admin Dashboard</h1>
+      {/* USERS TABLE */}
+      <div className="bg-white p-8 rounded-2xl shadow border border-gray-200">
+        <h2 className="text-3xl font-bold text-gray-900 mb-6">All Users</h2>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white shadow p-6 rounded-xl">
-          <p className="text-gray-600 text-sm">Total Documents</p>
-          <p className="text-3xl font-semibold">{stats.total}</p>
-        </div>
-
-        <div className="bg-white shadow p-6 rounded-xl">
-          <p className="text-gray-600 text-sm">Verified</p>
-          <p className="text-3xl font-semibold text-green-600">{stats.verified}</p>
-        </div>
-
-        <div className="bg-white shadow p-6 rounded-xl">
-          <p className="text-gray-600 text-sm">Pending</p>
-          <p className="text-3xl font-semibold text-yellow-600">{stats.pending}</p>
-        </div>
-
-        <div className="bg-white shadow p-6 rounded-xl">
-          <p className="text-gray-600 text-sm">Rejected</p>
-          <p className="text-3xl font-semibold text-red-600">{stats.rejected}</p>
-        </div>
-      </div>
-
-      {/* Message */}
-      {message.text && (
-        <div
-          className={`mb-4 p-4 rounded ${
-            message.type === "error"
-              ? "bg-red-100 text-red-700"
-              : "bg-green-100 text-green-700"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* Documents Table */}
-      <div className="bg-white shadow rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-xl font-bold">KYC Documents</h2>
-        </div>
-
-        {docs.length === 0 ? (
-          <p className="p-6 text-center text-gray-600">No documents uploaded</p>
+        {users.length === 0 ? (
+          <p className="text-gray-500">No users found.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs">User</th>
-                  <th className="px-6 py-3 text-left text-xs">Type</th>
-                  <th className="px-6 py-3 text-left text-xs">File</th>
-                  <th className="px-6 py-3 text-left text-xs">Status</th>
-                  <th className="px-6 py-3 text-left text-xs">Uploaded</th>
-                  <th className="px-6 py-3 text-left text-xs">Actions</th>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left bg-gray-50 border-b">
+                <th className="p-4 font-semibold">Name</th>
+                <th className="p-4 font-semibold">Email</th>
+                <th className="p-4 font-semibold">KYC Status</th>
+                <th className="p-4 font-semibold text-center">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {users.map((u) => (
+                <tr
+                  key={u._id}
+                  className="border-b hover:bg-gray-50 transition cursor-pointer"
+                >
+                  <td className="p-4">{u.name}</td>
+                  <td className="p-4">{u.email}</td>
+                  <td className="p-4">
+                    <span className="px-3 py-1 rounded-lg text-sm bg-blue-100 text-blue-700 font-semibold">
+                      {u.kyc_status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button
+                      onClick={() => openUser(u)}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    >
+                      View
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-
-              <tbody className="divide-y">
-                {docs.map(doc => (
-                  <tr key={doc._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">{doc.user_id?.email}</td>
-                    <td className="px-6 py-4">{doc.document_type.replace(/_/g, " ")}</td>
-
-                    <td className="px-6 py-4">
-                      <a
-                        href={`http://localhost:5000/uploads/${doc.file_name}`}
-                        className="text-blue-600 underline"
-                        target="_blank"
-                      >
-                        {doc.original_name}
-                      </a>
-                    </td>
-
-                    <td className="px-6 py-4">{doc.status}</td>
-
-                    <td className="px-6 py-4">
-                      {new Date(doc.upload_time).toLocaleDateString()}
-                    </td>
-
-                    <td className="px-6 py-4 space-x-4 text-sm">
-                      <button
-                        onClick={() => runOCR(doc.file_name)}
-                        className="text-blue-600 underline"
-                      >
-                        OCR
-                      </button>
-
-                      <button
-                        onClick={() => analyzeDoc(doc.file_name)}
-                        className="text-purple-600 underline"
-                      >
-                        AI
-                      </button>
-
-                      <button
-                        onClick={() => verify(doc._id)}
-                        className="text-green-600 underline"
-                      >
-                        Verify
-                      </button>
-
-                      <button
-                        onClick={() => reject(doc._id)}
-                        className="text-red-600 underline"
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
-      {/* Output Panel */}
-      {selectedDoc && (
-        <div className="mt-8 bg-white shadow p-6 rounded-xl">
-          <div className="flex justify-between">
-            <h2 className="text-xl font-semibold">
-              {selectedDoc.type === "OCR" ? "OCR Result" : "AI Result"}
-            </h2>
-            <button onClick={() => setSelectedDoc(null)}>✖</button>
-          </div>
+      {/* SELECTED USER PANEL */}
+      {selectedUser && (
+        <div className="bg-white p-8 rounded-2xl shadow border border-gray-200">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">
+            Reviewing: {selectedUser.name}
+          </h3>
+          <p className="text-gray-600 mb-6">{selectedUser.email}</p>
 
-          <pre className="bg-gray-100 mt-4 p-4 rounded max-h-96 overflow-auto">
-            {JSON.stringify(selectedDoc.data, null, 2)}
-          </pre>
+          {loading ? (
+            <p className="text-gray-500">Loading documents…</p>
+          ) : (
+            <div className="space-y-10">
+              {/* AI Summary */}
+              {docs.length > 0 && docs[0].ai_output && (
+                <div className="bg-gray-50 rounded-xl p-6 border">
+                  <h4 className="text-xl font-bold mb-3">AI Summary</h4>
+
+                  <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                    {docs[0].ai_output.summary_text}
+                  </p>
+
+                  {/* Match Results */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                    {Object.entries(docs[0].ai_output.match).map(
+                      ([key, val]) => (
+                        <div
+                          key={key}
+                          className="p-3 bg-white border rounded-xl text-center"
+                        >
+                          <p className="text-xs text-gray-500 uppercase font-semibold">
+                            {key.replace("_", " ")}
+                          </p>
+                          <p
+                            className={`text-lg font-bold ${
+                              val === "YES"
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {val}
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  <p className="mt-6 text-lg font-bold">
+                    Risk Level:{" "}
+                    <span
+                      className={
+                        docs[0].ai_output.risk === "LOW"
+                          ? "text-green-600"
+                          : docs[0].ai_output.risk === "MEDIUM"
+                          ? "text-yellow-600"
+                          : "text-red-600"
+                      }
+                    >
+                      {docs[0].ai_output.risk}
+                    </span>
+                  </p>
+                </div>
+              )}
+
+              {/* Document List */}
+              <div>
+                <h4 className="text-xl font-bold mb-4">Uploaded Documents</h4>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {docs.map((doc) => (
+                    <div
+                      key={doc._id}
+                      className="bg-white p-6 border rounded-2xl shadow hover:shadow-lg transition"
+                    >
+                      <h5 className="font-bold text-lg mb-2">
+                        {doc.document_type.replace("_", " ")}
+                      </h5>
+
+                      <p className="text-gray-600 text-sm mb-3">
+                        {doc.original_name}
+                      </p>
+
+                      <a
+                        href={`http://localhost:5000/uploads/${doc.file_name}`}
+                        className="text-blue-600 font-medium hover:text-blue-800"
+                        target="_blank"
+                      >
+                        View Document →
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex space-x-4 pt-6">
+                <button
+                  onClick={() => updateKycStatus("APPROVED")}
+                  className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700"
+                >
+                  APPROVE
+                </button>
+
+                <button
+                  onClick={() => updateKycStatus("REJECTED")}
+                  className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700"
+                >
+                  REJECT
+                </button>
+
+                <button
+                  onClick={() => updateKycStatus("NEEDS_REVIEW")}
+                  className="px-6 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600"
+                >
+                  NEEDS REVIEW
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

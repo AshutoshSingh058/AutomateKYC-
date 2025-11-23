@@ -294,40 +294,117 @@ ${ocrADDR?.raw_text || ""}
 `;
 
     const prompt = `
-You are an AI KYC engine.
-Return strict JSON:
+You are an AI KYC decision engine for a bank.
+
+Your job:
+1. Compare DECLARED customer details with OCR-extracted info from ID and ADDRESS documents.
+2. Check basic AML/PEP risk from the provided AML list.
+3. Decide a final_status with the following STRICT rules:
+
+- Use "APPROVED" if:
+  - Name and date of birth in OCR strongly match the declared KYC (allow minor spacing / case differences),
+  - Gender is consistent or not explicitly contradicted,
+  - Address on address-proof is reasonably similar to declared address (partial match is okay),
+  - Document text is readable (not severely blurry or missing),
+  - No strong AML/PEP hit for the person.
+
+- Use "REJECTED" if:
+  - There is a clear mismatch in NAME or DATE OF BIRTH between declared data and OCR,
+  - OR there is a strong AML/PEP match for this person,
+  - OR the document appears clearly invalid, unrelated, or belongs to a different person.
+
+- Use "NEEDS_REVIEW" only if:
+  - OCR text is too noisy, cropped, or incomplete to be confident,
+  - OR the data is partially matching but ambiguous and you cannot clearly decide approve vs reject.
+
+Output STRICT JSON only, with NO explanation outside the JSON object and NO extra text.
+Return exactly this structure:
+
 {
-  "summary_text": "...",
-  "match": {...},
-  "aml": {...},
-  "risk": "...",
-  "final_status": "APPROVED" | "NEEDS_REVIEW"
+  "summary_text": "Short bullet-style summary of what you found and why you made the decision.",
+  "match": {
+    "name_match": "YES" | "PARTIAL" | "NO",
+    "dob_match": "YES" | "PARTIAL" | "NO",
+    "gender_match": "YES" | "UNKNOWN" | "NO",
+    "address_match": "YES" | "PARTIAL" | "NO"
+  },
+  "aml": {
+    "potential_hit": true | false,
+    "hit_details": "Short note if any match was found, otherwise empty string"
+  },
+  "risk": "LOW" | "MEDIUM" | "HIGH",
+  "final_status": "APPROVED" | "NEEDS_REVIEW" | "REJECTED"
 }
 
-Declared:
-${JSON.stringify(user.declared_kyc)}
+DECLARED_KYC:
+${JSON.stringify(user.declared_kyc, null, 2)}
 
-OCR:
-${combined}
+OCR_TEXT:
+ID DOCUMENT:
+${ocrID?.raw_text || ""}
 
-AML:
-${JSON.stringify(amlData)}
+ADDRESS DOCUMENT:
+${ocrADDR?.raw_text || ""}
+
+AML_LIST:
+${JSON.stringify(amlData, null, 2)}
 `;
 
-    const reply = await model.generateContent(prompt);
-    const text = reply.response.text().replace(/```json|```/g, "");
-    const ai = JSON.parse(text);
+
+       const reply = await model.generateContent(prompt);
+
+    let rawText = reply.response.text() || "";
+    // Strip common markdown wrappers
+    rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    console.log("Gemini raw response:", rawText);
+
+    let ai;
+    try {
+      ai = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error("Gemini JSON parse error:", parseErr);
+      // Force fallback
+      ai = {
+        summary_text: "AI response could not be parsed. Marking for manual review.",
+        match: {},
+        aml: {},
+        risk: "MEDIUM",
+        final_status: "NEEDS_REVIEW"
+      };
+    }
+
 
     await Document.updateMany({ user_id: userId }, {
       ai_output: ai,
       risk_assessment: ai.risk
     });
 
-    await User.updateOne({ _id: userId }, { kyc_status: ai.final_status });
+        const allowedStatuses = ["APPROVED", "NEEDS_REVIEW", "REJECTED"];
+    let finalStatus = ai.final_status;
+
+    if (!allowedStatuses.includes(finalStatus)) {
+      console.warn("Invalid final_status from AI, defaulting to NEEDS_REVIEW:", finalStatus);
+      finalStatus = "NEEDS_REVIEW";
+    }
+
+    await Document.updateMany(
+      { user_id: userId },
+      {
+        ai_output: ai,
+        risk_assessment: ai.risk
+      }
+    );
+
+    await User.updateOne({ _id: userId }, { kyc_status: finalStatus });
+
 
   } catch (err) {
     console.log("Auto KYC error:", err);
-    await User.updateOne({ _id: userId }, { kyc_status: "NEEDS_REVIEW" });
+    await User.updateOne(
+      { _id: userId }, 
+      { kyc_status: "NEEDS_REVIEW" }
+    );
   }
 }
 

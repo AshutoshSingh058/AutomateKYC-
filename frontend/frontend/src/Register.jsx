@@ -20,7 +20,7 @@ export default function Register() {
     try {
       const res = await axios.post("http://localhost:5000/auth/register", form);
       localStorage.setItem("token", res.data.token);
-      navigate("/user");
+      navigate("/kyc/details");
     } catch (e) {
       setError(e.response?.data?.message || "Registration failed. Please try again.");
     } finally {

@@ -11,7 +11,8 @@ import Login from "./Login";
 
 // User/Admin Dashboards
 import UserDashboard from "./UserDashboard";
-import AdminDashboard from "./Dashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+
 
 // KYC Flow
 import KycDetails from "./pages/KycDetails";
@@ -29,17 +30,10 @@ export default function App() {
     <Router>
       <Routes>
 
-        {/* PUBLIC PAGES */}
+        {/* PUBLIC LANDING PAGE (no MainLayout) */}
+        <Route path="/" element={<Landing />} />
 
-        <Route
-          path="/"
-          element={
-            <MainLayout>
-              <Landing />
-            </MainLayout>
-          }
-        />
-
+        {/* PUBLIC PAGES WITH LAYOUT */}
         <Route
           path="/login"
           element={

@@ -1,0 +1,23 @@
+{
+  "pep_names": [
+    "Narendra Modi",
+    "Amit Shah",
+    "Rahul Gandhi",
+    "Sonia Gandhi",
+    "Manmohan Singh",
+    "Sharad Pawar",
+    "Arvind Kejriwal",
+    "Piyush Goyal"
+  ],
+  "sanction_terms": [
+    "money laundering",
+    "terrorism",
+    "funding terrorism",
+    "fraud",
+    "scam",
+    "blacklisted",
+    "criminal",
+    "wanted",
+    "defaulter"
+  ]
+}

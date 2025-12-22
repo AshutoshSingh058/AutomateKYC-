@@ -8,8 +8,7 @@ A full-stack MERN + Python OCR platform for automated KYC processing with docume
 This system collects customer information, extracts text using OCR from uploaded identity/address documents, matches extracted fields with user-declared KYC data, runs AML/PEP name screening, and finally assigns a **KYC Approved / Rejected / Pending** status automatically.
 
 ---
-Demo Video : https://drive.google.com/file/d/1DgGaxf4XezECyhHaPi31vNKN_E9vsN0g/view?usp=sharing
-## 🚀 Features
+
 
 ### ✅ End-to-End KYC Flow
 
